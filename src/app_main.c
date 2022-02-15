@@ -15,6 +15,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "lodepng.h"
+#include "string_utils.h"
 #include "trace.h"
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
@@ -65,17 +67,66 @@ static int xioctl(int fh, int request, void *arg)
   return r;
 }
 
-static void process_image(const void *p, int size)
+static void process_image(const void *yuyv_buffer, int yuyv_byte_count)
 {
   frame_number++;
-  char filename[15];
-  sprintf(filename, "frame-%d.raw", frame_number);
-  FILE *fp = fopen(filename, "wb");
 
-  fwrite(p, size, 1, fp);
+  const int width = 640;
+  const int height = 480;
+  const int yuyv_bytes_per_pixel = 2;
+  const int yuyv_bytes_per_row = (width * yuyv_bytes_per_pixel);
+  const int expected_yuyv_byte_count = (height * width * yuyv_bytes_per_pixel);
+  assert(yuyv_byte_count == expected_yuyv_byte_count);
 
-  fflush(fp);
-  fclose(fp);
+  const int rgba_bytes_per_pixel = 4;
+  const int rgba_bytes_per_row = (width * rgba_bytes_per_pixel);
+  const int rgba_byte_count = (height * width * rgba_bytes_per_pixel);
+  uint8_t *rgba_buffer = calloc(1, rgba_byte_count);
+
+  for (int y = 0; y < height; ++y)
+  {
+    const uint8_t *yuyv_row = yuyv_buffer + (y * yuyv_bytes_per_row);
+    uint8_t *rgba_row = rgba_buffer + (y * rgba_bytes_per_row);
+    for (int x = 0; x < width; x += 2)
+    {
+      const uint8_t *yuyv_pixel0 = yuyv_row + (x * yuyv_bytes_per_pixel);
+      const uint8_t *yuyv_pixel1 = yuyv_pixel0 + yuyv_bytes_per_pixel;
+      const int y0 = (yuyv_pixel0[0] - 16) * 1.164f;
+      const int u = yuyv_pixel0[1] - 128;
+      const int y1 = (yuyv_pixel1[0] - 16) * 1.164f;
+      const int v = yuyv_pixel1[1] - 128;
+      const uint8_t r0 = y0 + (1.596 * v);
+      const uint8_t g0 = y0 + (-0.392f * u) + (-0.813f * v);
+      const uint8_t b0 = y0 + (2.017f * u);
+      const uint8_t a0 = 255;
+      const uint8_t r1 = y1 + (1.596 * v);
+      const uint8_t g1 = y1 + (-0.392f * u) + (-0.813f * v);
+      const uint8_t b1 = y1 + (2.017f * u);
+      const uint8_t a1 = 255;
+      uint8_t *rgba_pixel0 = rgba_row + (x * rgba_bytes_per_pixel);
+      uint8_t *rgba_pixel1 = rgba_pixel0 + rgba_bytes_per_pixel;
+      rgba_pixel0[0] = r0;
+      rgba_pixel0[1] = g0;
+      rgba_pixel0[2] = b0;
+      rgba_pixel0[3] = a0;
+      rgba_pixel1[0] = r1;
+      rgba_pixel1[1] = g1;
+      rgba_pixel1[2] = b1;
+      rgba_pixel1[3] = a1;
+    }
+  }
+
+  char *filename = string_alloc_sprintf("frame-%d.png", frame_number);
+
+  const unsigned int encode_error =
+      lodepng_encode32_file(filename, rgba_buffer, width, height);
+  if (encode_error)
+  {
+    printf("error %u: %s\n", encode_error, lodepng_error_text(encode_error));
+  }
+
+  free(filename);
+  free(rgba_buffer);
 }
 
 static int read_frame(void)
@@ -388,6 +439,8 @@ static void init_mmap(void)
     if (-1 == xioctl(fd, VIDIOC_QUERYBUF, &buf))
       errno_exit("VIDIOC_QUERYBUF");
 
+    TRACE_INT(buf.length);
+
     buffers[n_buffers].length = buf.length;
     buffers[n_buffers].start =
         mmap(NULL /* start anywhere */, buf.length,
@@ -527,10 +580,10 @@ static void init_device(void)
   fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
   if (force_format)
   {
-    fprintf(stderr, "Set H264\r\n");
+    fprintf(stderr, "Set YUYV\r\n");
     fmt.fmt.pix.width = 640;                     // replace
     fmt.fmt.pix.height = 480;                    // replace
-    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_H264; // replace
+    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV; // replace
     fmt.fmt.pix.field = V4L2_FIELD_ANY;
 
     if (-1 == xioctl(fd, VIDIOC_S_FMT, &fmt))
@@ -544,6 +597,11 @@ static void init_device(void)
     if (-1 == xioctl(fd, VIDIOC_G_FMT, &fmt))
       errno_exit("VIDIOC_G_FMT");
   }
+
+  TRACE_INT(fmt.fmt.pix.width);
+  TRACE_INT(fmt.fmt.pix.height);
+  TRACE_INT(fmt.fmt.pix.bytesperline);
+  TRACE_INT(fmt.fmt.pix.sizeimage);
 
   /* Buggy driver paranoia. */
   min = fmt.fmt.pix.width * 2;

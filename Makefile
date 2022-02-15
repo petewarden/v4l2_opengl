@@ -2,6 +2,7 @@ CC := gcc
 CCFLAGS := \
   -std=gnu99 \
   -Wall \
+  -Wno-unused \
   -Werror \
   -g \
   -O0 \
@@ -9,7 +10,7 @@ CCFLAGS := \
   -Isrc/third_party \
   -Isrc/utils
 
-LDFLAGS :=
+LDFLAGS := 
 
 TEST_CCFLAGS := \
   -fsanitize=address \
@@ -94,6 +95,7 @@ run_yargs_test: $(BINDIR)yargs_test
 
 $(BINDIR)app_main_test: \
  $(OBJDIR)src/app_main_test.o \
+ $(OBJDIR)src/third_party/lodepng.o \
  $(OBJDIR)src/utils/file_utils.o \
  $(OBJDIR)src/utils/string_utils.o \
  $(OBJDIR)src/utils/yargs.o
@@ -106,6 +108,7 @@ run_app_main_test: $(BINDIR)app_main_test
 $(BINDIR)v4l2_opengl: \
  $(OBJDIR)src/app_main.o \
  $(OBJDIR)src/main.o \
+ $(OBJDIR)src/third_party/lodepng.o \
  $(OBJDIR)src/utils/file_utils.o \
  $(OBJDIR)src/utils/string_utils.o \
  $(OBJDIR)src/utils/yargs.o
