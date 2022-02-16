@@ -10,7 +10,10 @@ CCFLAGS := \
   -Isrc/third_party \
   -Isrc/utils
 
-LDFLAGS := 
+LDFLAGS := \
+  -lX11 \
+  -lGL \
+  -lGLU
 
 TEST_CCFLAGS := \
   -fsanitize=address \
@@ -95,6 +98,8 @@ run_yargs_test: $(BINDIR)yargs_test
 
 $(BINDIR)app_main_test: \
  $(OBJDIR)src/app_main_test.o \
+ $(OBJDIR)src/capture_main.o \
+ $(OBJDIR)src/window_main.o \
  $(OBJDIR)src/third_party/lodepng.o \
  $(OBJDIR)src/utils/file_utils.o \
  $(OBJDIR)src/utils/string_utils.o \
@@ -107,7 +112,9 @@ run_app_main_test: $(BINDIR)app_main_test
 
 $(BINDIR)v4l2_opengl: \
  $(OBJDIR)src/app_main.o \
+ $(OBJDIR)src/capture_main.o \
  $(OBJDIR)src/main.o \
+ $(OBJDIR)src/window_main.o \
  $(OBJDIR)src/third_party/lodepng.o \
  $(OBJDIR)src/utils/file_utils.o \
  $(OBJDIR)src/utils/string_utils.o \
