@@ -11,6 +11,7 @@ CCFLAGS := \
   -Isrc/utils
 
 LDFLAGS := \
+  -lpthread \
   -lX11 \
   -lGL \
   -lGLU
